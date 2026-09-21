@@ -1,0 +1,115 @@
+{{!
+    This file is part of Moodle - https://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template mod_videonotes/view
+
+    Example context (json):
+    {
+        Aqui tem que criar o context em inglês
+    }
+}}
+<div class="videonotes" id="videonotes-app" data-config="{{configjson}}">
+    <div class="videonotes-header">
+        <div>
+            <h2>{{name}}</h2>
+            {{#hasintro}}
+                <div class="videonotes-intro">{{{intro}}}</div>{{/hasintro}}
+        </div>
+        {{#canviewreport}}
+            <a class="btn btn-secondary" href="{{{reporturl}}}">{{#str}}sharednotesreport, videonotes{{/str}}</a>
+        {{/canviewreport}}
+    </div>
+
+    <div class="videonotes-layout">
+        <section class="videonotes-video-column">
+            <div id="videonotes-player" class="videonotes-player" aria-label="{{#str}}video, videonotes{{/str}}"></div>
+            <div class="videonotes-progress-wrap">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>{{#str}}yourprogress, videonotes{{/str}}</strong>
+                    <span id="videonotes-percent">{{percent}}%</span>
+                </div>
+                <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                     aria-valuenow="{{percentrounded}}">
+                    <div id="videonotes-progress-bar" class="progress-bar" style="width: {{percentrounded}}%"></div>
+                </div>
+                <div id="videonotes-timeline" class="videonotes-timeline"
+                     aria-label="{{#str}}notetimeline, videonotes{{/str}}"></div>
+            </div>
+
+            <button type="button" class="btn btn-primary videonotes-add-current" id="videonotes-add-current">
+                {{#str}}addnoteatcurrenttime, videonotes{{/str}}
+            </button>
+
+            {{#requirespercent}}
+                <div class="alert alert-info mt-3">{{completionpercentmessage}}</div>{{/requirespercent}}
+            {{#requiresnotes}}
+                <div class="alert alert-info mt-3">{{completionnotesmessage}}</div>{{/requiresnotes}}
+        </section>
+
+        <aside class="videonotes-notes-column">
+            <div class="videonotes-tools">
+                <input type="search" id="videonotes-search" class="form-control"
+                       placeholder="{{#str}}searchnotes, videonotes{{/str}}">
+                <div class="videonotes-export-buttons">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="videonotes-print">{{#str}}
+                        printnotes, videonotes{{/str}}</button>
+                    <a class="btn btn-outline-secondary btn-sm" href="{{{exportcsvurl}}}">{{#str}}
+                        exportcsv, videonotes{{/str}}</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="{{{exporttxturl}}}">{{#str}}
+                        exporttxt, videonotes{{/str}}</a>
+                </div>
+            </div>
+
+            <div id="videonotes-editor" class="videonotes-editor d-none">
+                <input type="hidden" id="videonotes-noteid" value="0">
+                <input type="hidden" id="videonotes-timecode" value="0">
+                <div class="videonotes-editor-time" id="videonotes-editor-time">00:00</div>
+                <label for="videonotes-category">{{#str}}category, videonotes{{/str}}</label>
+                <select id="videonotes-category" class="form-select mb-2">
+                    {{#categories}}
+                        <option value="{{value}}">{{label}}</option>{{/categories}}
+                </select>
+                <label for="videonotes-text">{{#str}}note, videonotes{{/str}}</label>
+                <textarea id="videonotes-text" class="form-control" rows="5"></textarea>
+                {{#shareavailable}}
+                    <label class="form-check mt-2">
+                        <input type="checkbox" class="form-check-input" id="videonotes-shared">
+                        <span class="form-check-label">{{#str}}sharewithteacher, videonotes{{/str}}</span>
+                    </label>
+                {{/shareavailable}}
+                <div class="mt-3 d-flex gap-2">
+                    <button type="button" class="btn btn-primary" id="videonotes-save">{{#str}}
+                        savechanges{{/str}}</button>
+                    <button type="button" class="btn btn-secondary" id="videonotes-cancel">{{#str}}
+                        cancel{{/str}}</button>
+                </div>
+            </div>
+
+            <div class="videonotes-list-heading">
+                <strong>{{#str}}mynotes, videonotes{{/str}}</strong>
+                <span class="badge bg-secondary" id="videonotes-count">{{notecount}}</span>
+            </div>
+            <div id="videonotes-list" class="videonotes-list">
+                {{#notes}}{{> mod_videonotes/note_item}}{{/notes}}
+                <div id="videonotes-empty" class="text-muted p-3 {{#hasnotes}}d-none{{/hasnotes}}">{{#str}}
+                    nonotesyet, videonotes{{/str}}</div>
+                <div id="videonotes-no-match" class="text-muted p-3 d-none">{{#str}}
+                    nonotesmatch, videonotes{{/str}}</div>
+            </div>
+        </aside>
+    </div>
+</div>

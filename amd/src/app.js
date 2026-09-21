@@ -1,0 +1,553 @@
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Video Notes player, tracking and note UI.
+ *
+ * @module     mod_videonotes/app
+ * @package   mod_videonotes
+ * @copyright  2026 Eduardo Kraus
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+import Ajax from 'core/ajax';
+import Templates from 'core/templates';
+import Notification from 'core/notification';
+import Str from 'core/str';
+
+var root = null, config = null, player = null, duration = 0;
+var loadScript = function (src, test, callback) {
+    if (test()) {
+        callback();
+        return;
+    }
+    var existing = document.querySelector('script[data-videonotes-src="' + src + '"]');
+    if (existing) {
+        existing.addEventListener('load', callback, {once: true});
+        return;
+    }
+    var s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.dataset.videonotesSrc = src;
+    s.addEventListener('load', callback, {once: true});
+    document.head.appendChild(s);
+};
+var BasePlayer = function () {
+    this.events = {};
+    this.playing = false;
+};
+BasePlayer.prototype.on = function (name, cb) {
+    (this.events[name] = this.events[name] || []).push(cb);
+};
+BasePlayer.prototype.emit = function (name, arg) {
+    (this.events[name] || []).forEach(function (cb) {
+        cb(arg);
+    });
+};
+BasePlayer.prototype.isPlaying = function () {
+    return this.playing;
+};
+var Html5Player = function (container, url) {
+    BasePlayer.call(this);
+    this.video = document.createElement('video');
+    this.video.controls = true;
+    this.video.preload = 'metadata';
+    this.video.playsInline = true;
+    this.video.src = url;
+    container.appendChild(this.video);
+    var self = this;
+    this.video.addEventListener('loadedmetadata', function () {
+        self.emit('ready');
+    });
+    this.video.addEventListener('play', function () {
+        self.playing = true;
+        self.emit('play');
+    });
+    this.video.addEventListener('pause', function () {
+        self.playing = false;
+        self.emit('pause');
+    });
+    this.video.addEventListener('ended', function () {
+        self.playing = false;
+        self.emit('ended');
+    });
+    this.video.addEventListener('seeking', function () {
+        self.emit('seeking', self.video.currentTime);
+    });
+};
+Html5Player.prototype = Object.create(BasePlayer.prototype);
+Html5Player.prototype.constructor = Html5Player;
+Html5Player.prototype.getCurrentTime = function () {
+    return Promise.resolve(this.video.currentTime || 0);
+};
+Html5Player.prototype.getDuration = function () {
+    return Promise.resolve(isFinite(this.video.duration) ? this.video.duration : 0);
+};
+Html5Player.prototype.seek = function (t) {
+    this.video.currentTime = Math.max(0, t);
+    return Promise.resolve();
+};
+var YouTubePlayer = function (container, id) {
+    BasePlayer.call(this);
+    this.yt = null;
+    var self = this;
+    var start = function () {
+        self.yt = new window.YT.Player(container, {
+            videoId: id,
+            playerVars: {rel: 0, playsinline: 1},
+            events: {
+                onReady: function () {
+                    self.emit('ready');
+                }, onStateChange: function (e) {
+                    if (e.data === window.YT.PlayerState.PLAYING) {
+                        self.playing = true;
+                        self.emit('play');
+                    } else if (e.data === window.YT.PlayerState.ENDED) {
+                        self.playing = false;
+                        self.emit('ended');
+                    } else if (e.data === window.YT.PlayerState.PAUSED) {
+                        self.playing = false;
+                        self.emit('pause');
+                    }
+                }
+            }
+        });
+    };
+    if (window.YT && window.YT.Player) {
+        start();
+    } else {
+        var old = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = function () {
+            if (typeof old === 'function') {
+                old();
+            }
+            start();
+        };
+        loadScript('https://www.youtube.com/iframe_api', function () {
+            return !!(window.YT && window.YT.Player);
+        }, function () {
+        });
+    }
+};
+YouTubePlayer.prototype = Object.create(BasePlayer.prototype);
+YouTubePlayer.prototype.constructor = YouTubePlayer;
+YouTubePlayer.prototype.getCurrentTime = function () {
+    return Promise.resolve(this.yt && this.yt.getCurrentTime ? this.yt.getCurrentTime() : 0);
+};
+YouTubePlayer.prototype.getDuration = function () {
+    return Promise.resolve(this.yt && this.yt.getDuration ? this.yt.getDuration() : 0);
+};
+YouTubePlayer.prototype.seek = function (t) {
+    if (this.yt && this.yt.seekTo) {
+        this.yt.seekTo(Math.max(0, t), true);
+    }
+    return Promise.resolve();
+};
+var VimeoPlayer = function (container, url) {
+    BasePlayer.call(this);
+    this.vm = null;
+    var self = this;
+    loadScript('https://player.vimeo.com/api/player.js', function () {
+        return !!(window.Vimeo && window.Vimeo.Player);
+    }, function () {
+        self.vm = new window.Vimeo.Player(container, {url: url, responsive: true, dnt: true});
+        self.vm.ready().then(function () {
+            self.emit('ready');
+        });
+        self.vm.on('play', function () {
+            self.playing = true;
+            self.emit('play');
+        });
+        self.vm.on('pause', function () {
+            self.playing = false;
+            self.emit('pause');
+        });
+        self.vm.on('ended', function () {
+            self.playing = false;
+            self.emit('ended');
+        });
+        self.vm.on('seeked', function (data) {
+            self.emit('seeking', data.seconds);
+        });
+    });
+};
+VimeoPlayer.prototype = Object.create(BasePlayer.prototype);
+VimeoPlayer.prototype.constructor = VimeoPlayer;
+VimeoPlayer.prototype.getCurrentTime = function () {
+    return this.vm ? this.vm.getCurrentTime() : Promise.resolve(0);
+};
+VimeoPlayer.prototype.getDuration = function () {
+    return this.vm ? this.vm.getDuration() : Promise.resolve(0);
+};
+VimeoPlayer.prototype.seek = function (t) {
+    return this.vm ? this.vm.setCurrentTime(Math.max(0, t)) : Promise.resolve();
+};
+var makePlayer = function () {
+    var c = document.getElementById('videonotes-player'), p = config.player;
+    if (!p) {
+        return null;
+    }
+    if (p.type === 0 || p.type === 1) {
+        if (!p.url) {
+            return null;
+        }
+        return new Html5Player(c, p.url);
+    }
+    if (p.type === 2 && p.videoid) {
+        return new YouTubePlayer(c, p.videoid);
+    }
+    if (p.type === 3 && p.url) {
+        return new VimeoPlayer(c, p.url);
+    }
+    return null;
+};
+var fmt = function (sec) {
+    sec = Math.max(0, Math.round(sec || 0));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h > 0 ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') : String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+};
+var maxWatched = function () {
+    var max = 0;
+    (config.segments || []).forEach(function (s) {
+        if (Array.isArray(s) && s.length > 1) {
+            max = Math.max(max, Number(s[1]) || 0);
+        }
+    });
+    return max;
+};
+var updateProgress = function (data) {
+    var percent = Math.max(0, Math.min(100, Number(data.percent) || 0));
+    var label = document.getElementById('videonotes-percent'), bar = document.getElementById('videonotes-progress-bar');
+    if (label) {
+        label.textContent = percent.toFixed(2) + '%';
+    }
+    if (bar) {
+        bar.style.width = Math.round(percent) + '%';
+        bar.parentElement.setAttribute('aria-valuenow', Math.round(percent));
+    }
+    try {
+        config.segments = JSON.parse(data.segments) || config.segments;
+    } catch (e) {/* Ignore invalid fallback. */
+    }
+    drawTimeline();
+};
+var tracker = function () {
+    var last = null, pendingStart = null, pendingEnd = null, pendingWatch = 0, lastWall = Date.now(), sending = false;
+    var flush = function () {
+        if (sending || pendingStart === null || pendingEnd === null || pendingEnd <= pendingStart) {
+            return Promise.resolve();
+        }
+        sending = true;
+        var args = {
+            cmid: config.cmid,
+            segmentstart: pendingStart,
+            segmentend: pendingEnd,
+            currentposition: pendingEnd,
+            duration: duration,
+            watchtime: pendingWatch
+        };
+        pendingStart = null;
+        pendingEnd = null;
+        pendingWatch = 0;
+        return Ajax.call([{methodname: 'mod_videonotes_update_progress', args: args}])[0].then(function (r) {
+            updateProgress(r);
+            sending = false;
+            return r;
+        }).catch(function (e) {
+            sending = false;
+            Notification.exception(e);
+        });
+    };
+    var tick = function () {
+        if (!player || !player.isPlaying()) {
+            last = null;
+            lastWall = Date.now();
+            return;
+        }
+        Promise.all([player.getCurrentTime(), player.getDuration()]).then(function (v) {
+            var now = Date.now(), cur = Number(v[0]) || 0, dur = Number(v[1]) || 0;
+            if (dur > 0) {
+                duration = dur;
+                drawTimeline();
+            }
+            if (last !== null) {
+                var delta = cur - last, wall = Math.min(3, Math.max(0, (now - lastWall) / 1000));
+                if (!config.allowseek && delta > 4.5) {
+                    var allowed = maxWatched();
+                    player.seek(allowed);
+                    last = allowed;
+                    lastWall = now;
+                    Str.get_string('seekblocked', 'videonotes').then(function (m) {
+                        Notification.addNotification({message: m, type: 'warning'});
+                    });
+                    return;
+                }
+                if (delta >= 0 && delta <= 4.5) {
+                    if (pendingStart === null) {
+                        pendingStart = last;
+                    }
+                    pendingEnd = cur;
+                    pendingWatch += wall;
+                } else {
+                    flush();
+                }
+            }
+            last = cur;
+            lastWall = now;
+            if (pendingWatch >= 8) {
+                flush();
+            }
+        });
+    };
+    var timer = setInterval(tick, 2000);
+    player.on('pause', flush);
+    player.on('ended', flush);
+    window.addEventListener('pagehide', function () {
+        flush();
+        clearInterval(timer);
+    });
+};
+var resume = function () {
+    player.getDuration().then(function (d) {
+        duration = Number(d) || 0;
+        drawTimeline();
+        var pos = Number(config.lastposition) || 0;
+        if (pos <= 3 || config.resumeplayback === 0) {
+            return;
+        }
+        if (config.resumeplayback === 1) {
+            player.seek(pos);
+            return;
+        }
+        Str.get_string('resumequestion', 'videonotes', fmt(pos)).then(function (q) {
+            if (window.confirm(q)) {
+                player.seek(pos);
+            }
+        });
+    });
+};
+var enforceSeek = function () {
+    if (config.allowseek) {
+        return;
+    }
+    var guard = false;
+    player.on('seeking', function (target) {
+        if (guard) {
+            return;
+        }
+        var allowed = maxWatched() + 5;
+        if (Number(target) > allowed) {
+            guard = true;
+            player.seek(maxWatched()).then(function () {
+                guard = false;
+            });
+            Str.get_string('seekblocked', 'videonotes').then(function (m) {
+                Notification.addNotification({message: m, type: 'warning'});
+            });
+        }
+    });
+};
+var editor = function (note) {
+    var box = document.getElementById('videonotes-editor');
+    box.classList.remove('d-none');
+    document.getElementById('videonotes-noteid').value = note ? note.id : 0;
+    document.getElementById('videonotes-timecode').value = note ? note.timecode : 0;
+    document.getElementById('videonotes-editor-time').textContent = fmt(note ? note.timecode : 0);
+    document.getElementById('videonotes-category').value = note ? note.category : 'important';
+    document.getElementById('videonotes-text').value = note ? note.note : '';
+    var sh = document.getElementById('videonotes-shared');
+    if (sh) {
+        sh.checked = !!(note && note.shared);
+    }
+    document.getElementById('videonotes-text').focus();
+};
+var closeEditor = function () {
+    document.getElementById('videonotes-editor').classList.add('d-none');
+};
+var updateEmpty = function () {
+    var notes = document.querySelectorAll('#videonotes-list .videonotes-note').length;
+    document.getElementById('videonotes-count').textContent = notes;
+    document.getElementById('videonotes-empty').classList.toggle('d-none', notes > 0);
+};
+var sortNotes = function () {
+    var list = document.getElementById('videonotes-list'),
+        items = Array.from(list.querySelectorAll('.videonotes-note'));
+    items.sort(function (a, b) {
+        return Number(a.dataset.time) - Number(b.dataset.time);
+    });
+    var anchor = document.getElementById('videonotes-empty');
+    items.forEach(function (i) {
+        list.insertBefore(i, anchor);
+    });
+    drawTimeline();
+};
+var renderNote = function (note) {
+    return Templates.render('mod_videonotes/note_item', note).then(function (html) {
+        var holder = document.createElement('div');
+        holder.innerHTML = html;
+        var node = holder.firstElementChild,
+            old = document.querySelector('.videonotes-note[data-note-id="' + note.id + '"]');
+        if (old) {
+            old.replaceWith(node);
+        } else {
+            document.getElementById('videonotes-list').insertBefore(node, document.getElementById('videonotes-empty'));
+        }
+        sortNotes();
+        updateEmpty();
+    });
+};
+var saveNote = function () {
+    var args = {
+        cmid: config.cmid,
+        noteid: Number(document.getElementById('videonotes-noteid').value) || 0,
+        timecode: Number(document.getElementById('videonotes-timecode').value) || 0,
+        category: document.getElementById('videonotes-category').value,
+        note: document.getElementById('videonotes-text').value,
+        shared: !!(document.getElementById('videonotes-shared') && document.getElementById('videonotes-shared').checked)
+    };
+    Ajax.call([{methodname: 'mod_videonotes_save_note', args: args}])[0].then(function (n) {
+        return renderNote(n);
+    }).then(closeEditor).catch(Notification.exception);
+};
+var deleteNote = function (id, node) {
+    Str.get_string('confirmdelete', 'videonotes').then(function (m) {
+        if (!window.confirm(m)) {
+            return;
+        }
+        Ajax.call([{
+            methodname: 'mod_videonotes_delete_note',
+            args: {cmid: config.cmid, noteid: Number(id)}
+        }])[0].then(function () {
+            node.remove();
+            updateEmpty();
+            drawTimeline();
+        }).catch(Notification.exception);
+    });
+};
+var drawTimeline = function () {
+    var line = document.getElementById('videonotes-timeline');
+    if (!line) {
+        return;
+    }
+    line.querySelectorAll('.videonotes-marker,.videonotes-watched').forEach(function (n) {
+        n.remove();
+    });
+    if (!duration) {
+        return;
+    }
+    (config.segments || []).forEach(function (segment) {
+        if (!Array.isArray(segment) || segment.length < 2) {
+            return;
+        }
+        var start = Math.max(0, Math.min(duration, Number(segment[0]) || 0)),
+            end = Math.max(start, Math.min(duration, Number(segment[1]) || 0));
+        if (end <= start) {
+            return;
+        }
+        var watched = document.createElement('span');
+        watched.className = 'videonotes-watched';
+        watched.style.left = (start / duration * 100) + '%';
+        watched.style.width = ((end - start) / duration * 100) + '%';
+        watched.setAttribute('aria-hidden', 'true');
+        line.appendChild(watched);
+    });
+    document.querySelectorAll('#videonotes-list .videonotes-note').forEach(function (note) {
+        var t = Number(note.dataset.time) || 0, marker = document.createElement('button');
+        marker.type = 'button';
+        marker.className = 'videonotes-marker videonotes-marker-' + (note.dataset.category || 'important');
+        marker.style.left = Math.max(0, Math.min(100, (t / duration) * 100)) + '%';
+        marker.title = fmt(t);
+        marker.setAttribute('aria-label', fmt(t));
+        marker.addEventListener('click', function () {
+            player.seek(t);
+        });
+        line.appendChild(marker);
+    });
+};
+var filterNotes = function () {
+    var q = (document.getElementById('videonotes-search').value || '').trim().toLowerCase(), visible = 0;
+    document.querySelectorAll('#videonotes-list .videonotes-note').forEach(function (n) {
+        var show = !q || (n.dataset.search || '').toLowerCase().indexOf(q) !== -1;
+        n.classList.toggle('d-none', !show);
+        if (show) {
+            visible++;
+        }
+    });
+    document.getElementById('videonotes-no-match').classList.toggle('d-none', visible > 0 || !q);
+};
+var bind = function () {
+    document.getElementById('videonotes-add-current').addEventListener('click', function () {
+        player.getCurrentTime().then(function (t) {
+            editor({id: 0, timecode: t, category: 'important', note: '', shared: false});
+        });
+    });
+    document.getElementById('videonotes-save').addEventListener('click', saveNote);
+    document.getElementById('videonotes-cancel').addEventListener('click', closeEditor);
+    document.getElementById('videonotes-search').addEventListener('input', filterNotes);
+    document.getElementById('videonotes-print').addEventListener('click', function () {
+        window.print();
+    });
+    document.getElementById('videonotes-list').addEventListener('click', function (e) {
+        var jump = e.target.closest('.videonotes-jump');
+        if (jump) {
+            player.seek(Number(jump.dataset.time) || 0);
+            return;
+        }
+        var edit = e.target.closest('.videonotes-edit');
+        if (edit) {
+            editor({
+                id: Number(edit.dataset.id) || 0,
+                timecode: Number(edit.dataset.time) || 0,
+                category: edit.dataset.category,
+                note: edit.dataset.note || '',
+                shared: edit.dataset.shared === 'true' || edit.dataset.shared === '1'
+            });
+            return;
+        }
+        var del = e.target.closest('.videonotes-delete');
+        if (del) {
+            deleteNote(del.dataset.id, del.closest('.videonotes-note'));
+        }
+    });
+};
+var init = function () {
+    root = document.getElementById('videonotes-app');
+    if (!root) {
+        return;
+    }
+    try {
+        config = JSON.parse(root.dataset.config);
+    } catch (e) {
+        Notification.exception(e);
+        return;
+    }
+    player = makePlayer();
+    if (!player) {
+        Str.get_string('playererror', 'videonotes').then(function (m) {
+            Notification.addNotification({message: m, type: 'error'});
+        });
+        return;
+    }
+    bind();
+    player.on('ready', function () {
+        resume();
+        enforceSeek();
+        tracker();
+        drawTimeline();
+    });
+};
+
+export {init};
