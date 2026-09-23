@@ -44,7 +44,7 @@ class note_manager {
      * @return stdClass
      */
     public function save(\stdClass $activity, int $userid, int $noteid, float $timecode,
-                         string    $category, string $text, bool $shared): \stdClass {
+                         string $category, string $text, bool $shared): \stdClass {
         global $DB;
 
         if (!in_array($category, self::CATEGORIES, true)) {

@@ -62,7 +62,7 @@ class save_note extends external_api {
      * @param bool $shared Share flag.
      * @return array
      */
-    public static function execute(int    $cmid, int $noteid, float $timecode, string $category,
+    public static function execute(int $cmid, int $noteid, float $timecode, string $category,
                                    string $note, bool $shared): array {
         global $DB, $USER;
 
