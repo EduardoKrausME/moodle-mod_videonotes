@@ -40,7 +40,6 @@ $PAGE->set_url('/mod/videonotes/view.php', ['id' => $cm->id]);
 $PAGE->set_title(format_string($activity->name));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
-$PAGE->requires->css('/mod/videonotes/styles.css');
 
 $completion = new completion_info($course);
 if ($completion->is_enabled($cm)) {

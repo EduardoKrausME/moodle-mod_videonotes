@@ -43,7 +43,6 @@ $PAGE->set_url('/mod/videonotes/report.php', ['id' => $cm->id]);
 $PAGE->set_title(get_string('sharednotesreport', 'videonotes'));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
-$PAGE->requires->css('/mod/videonotes/styles.css');
 
 $sql = "SELECT n.*, u.firstname, u.lastname, u.email
           FROM {videonotes_notes} n
