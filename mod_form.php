@@ -47,7 +47,7 @@ class mod_videonotes_mod_form extends moodleform_mod {
         $mform->addRule('name', null, 'required', null, 'client');
         $this->standard_intro_elements();
 
-        $mform->addElement('header', 'videosettings', get_string('videosettings', 'videonotes'));
+        $mform->addElement('html', '<h3>' . get_string('videosettings', 'videonotes') . '</h3>');
         $mform->addElement('select', 'videosource', get_string('videosource', 'videonotes'), [
             0 => get_string('sourceupload', 'videonotes'),
             1 => get_string('sourceurl', 'videonotes'),
@@ -58,7 +58,6 @@ class mod_videonotes_mod_form extends moodleform_mod {
 
         $mform->addElement('filemanager', 'videofile', get_string('videofile', 'videonotes'), null, [
             'subdirs' => 0,
-            'maxfiles' => 1,
             'accepted_types' => ['video'],
         ]);
         $mform->hideIf('videofile', 'videosource', 'neq', 0);
@@ -77,7 +76,7 @@ class mod_videonotes_mod_form extends moodleform_mod {
         $mform->addElement('selectyesno', 'allowseek', get_string('allowseek', 'videonotes'));
         $mform->setDefault('allowseek', 1);
 
-        $mform->addElement('header', 'notesettings', get_string('notesettings', 'videonotes'));
+        $mform->addElement('html', '<h3>' . get_string('notesettings', 'videonotes') . '</h3>');
         $mform->addElement('select', 'notemode', get_string('notemode', 'videonotes'), [
             0 => get_string('notemodeprivate', 'videonotes'),
             1 => get_string('notemodeshareoptional', 'videonotes'),
@@ -146,6 +145,15 @@ class mod_videonotes_mod_form extends moodleform_mod {
         if ((int)$data['videosource'] === 3 && !empty($data['videourl']) &&
             (!preg_match('~vimeo\.com~i', $data['videourl']) || !preg_match('~/[0-9]+(?:$|[?/])~', $data['videourl']))) {
             $errors['videourl'] = get_string('invalidvimeourl', 'videonotes');
+        }
+        foreach (['videofile'] as $field) {
+            $draftid = (int)($data[$field] ?? 0);
+            if ($draftid > 0) {
+                $draftinfo = file_get_draft_area_info($draftid);
+                if ((int)$draftinfo['filecount'] > 1) {
+                    $errors[$field] = get_string('errormaxfiles', 'videonotes');
+                }
+            }
         }
         return $errors;
     }
