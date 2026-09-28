@@ -44,17 +44,36 @@ $PAGE->set_title(get_string('sharednotesreport', 'videonotes'));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
 
-$sql = "SELECT n.*, u.firstname, u.lastname, u.email
+$userfieldsapi = \core_user\fields::for_identity($context)->with_name();
+$identityfields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
+$userfieldssql = $userfieldsapi->get_sql('u', true, '', '', false);
+
+$sql = "SELECT n.*, {$userfieldssql->selects}
           FROM {videonotes_notes} n
           JOIN {user} u ON u.id = n.userid
+               {$userfieldssql->joins}
          WHERE n.videonotesid = :activityid AND n.shared = 1
       ORDER BY u.lastname, u.firstname, n.timecode, n.id";
-$records = $DB->get_records_sql($sql, ['activityid' => $activity->id]);
+$params = ['activityid' => $activity->id] + $userfieldssql->params;
+$records = $DB->get_records_sql($sql, $params);
+
 $rows = [];
 foreach ($records as $record) {
+    $identity = [];
+    foreach ($identityfields as $field) {
+        if (!isset($record->{$field}) || $record->{$field} === '') {
+            continue;
+        }
+        $identity[] = [
+            'label' => \core_user\fields::get_display_name($field),
+            'value' => (string)$record->{$field},
+        ];
+    }
+
     $rows[] = [
         'fullname' => fullname($record),
-        'email' => $record->email,
+        'identity' => $identity,
+        'hasidentity' => !empty($identity),
         'timestring' => note_manager::format_time((float)$record->timecode),
         'categorylabel' => get_string('category:' . $record->category, 'videonotes'),
         'note' => $record->note,

@@ -89,6 +89,7 @@ $string['resumeautomatic'] = 'Continuar automaticamente da última posição';
 $string['resumefromstart'] = 'Sempre iniciar do começo';
 $string['resumeno'] = 'Começar do início';
 $string['resumeplayback'] = 'Retomada da reprodução';
+$string['resetuserdata'] = 'Excluir todas as anotações e o progresso de vídeo dos estudantes';
 $string['resumequestion'] = 'Você parou em {$a}. Deseja continuar deste ponto?';
 $string['resumeyes'] = 'Continuar';
 $string['savenoteerror'] = 'Não foi possível salvar a anotação.';

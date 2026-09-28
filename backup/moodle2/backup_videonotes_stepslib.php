@@ -61,6 +61,7 @@ class backup_videonotes_activity_structure_step extends backup_activity_structur
 
         $progress->annotate_ids('user', 'userid');
         $note->annotate_ids('user', 'userid');
+        $videonotes->annotate_files('mod_videonotes', 'intro', null);
         $videonotes->annotate_files('mod_videonotes', 'video', null);
 
         return $this->prepare_activity_structure($videonotes);

@@ -114,6 +114,52 @@ function videonotes_delete_instance(int $id): bool {
 }
 
 /**
+ * Adds Video Notes options to the course reset form.
+ *
+ * @param MoodleQuickForm $mform Reset form.
+ * @return void
+ */
+function videonotes_reset_course_form_definition(&$mform): void {
+    $mform->addElement('header', 'videonotesheader', get_string('modulenameplural', 'videonotes'));
+    $mform->addElement('advcheckbox', 'reset_videonotes', get_string('resetuserdata', 'videonotes'));
+}
+
+/**
+ * Returns default values for the course reset form.
+ *
+ * @param stdClass $course Course record.
+ * @return array
+ */
+function videonotes_reset_course_form_defaults($course): array {
+    return ['reset_videonotes' => 1];
+}
+
+/**
+ * Removes learner notes and playback progress during a course reset.
+ *
+ * @param stdClass $data Course reset data.
+ * @return array Reset status.
+ */
+function videonotes_reset_userdata($data): array {
+    global $DB;
+
+    if (empty($data->reset_videonotes)) {
+        return [];
+    }
+
+    $instancesql = "SELECT id FROM {videonotes} WHERE course = :courseid";
+    $params = ['courseid' => $data->courseid];
+    $DB->delete_records_select('videonotes_notes', "videonotesid IN ($instancesql)", $params);
+    $DB->delete_records_select('videonotes_progress', "videonotesid IN ($instancesql)", $params);
+
+    return [[
+        'component' => get_string('modulenameplural', 'videonotes'),
+        'item' => get_string('resetuserdata', 'videonotes'),
+        'error' => false,
+    ]];
+}
+
+/**
  * Saves the uploaded video file from the draft area.
  *
  * @param stdClass $data Activity record.
@@ -168,6 +214,10 @@ function mod_videonotes_pluginfile($course, $cm, $context, string $filearea, arr
 
     require_login($course, true, $cm);
     require_capability('mod/videonotes:view', $context);
+
+    if (!$args || (int)array_shift($args) !== 0) {
+        return false;
+    }
 
     $filename = array_pop($args);
     $filepath = '/' . ($args ? implode('/', $args) . '/' : '');
@@ -224,28 +274,6 @@ function videonotes_get_coursemodule_info(stdClass $cm): ?cached_cm_info {
         ];
     }
     return $info;
-}
-
-/**
- * Returns active custom completion descriptions.
- *
- * @param cached_cm_info $cm Course module information.
- * @return array
- */
-function videonotes_get_completion_active_rule_descriptions(cached_cm_info $cm): array {
-    if ((int)$cm->completion !== COMPLETION_TRACKING_AUTOMATIC || empty($cm->customdata['customcompletionrules'])) {
-        return [];
-    }
-
-    $rules = $cm->customdata['customcompletionrules'];
-    $descriptions = [];
-    if (!empty($rules['completionpercent'])) {
-        $descriptions[] = get_string('completiondetail:percent', 'videonotes', $rules['completionpercent']);
-    }
-    if (!empty($rules['completionnotes'])) {
-        $descriptions[] = get_string('completiondetail:notes', 'videonotes', $rules['completionnotes']);
-    }
-    return $descriptions;
 }
 
 /**

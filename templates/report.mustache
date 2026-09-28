@@ -39,7 +39,16 @@
                 <tbody>
                 {{#rows}}
                     <tr>
-                        <td>{{fullname}}<br><small>{{email}}</small></td>
+                        <td>
+                            {{fullname}}
+                            {{#hasidentity}}
+                                <div class="small text-muted">
+                                    {{#identity}}
+                                        <div>{{label}}: {{value}}</div>
+                                    {{/identity}}
+                                </div>
+                            {{/hasidentity}}
+                        </td>
                         <td>{{timestring}}</td>
                         <td>{{categorylabel}}</td>
                         <td>{{note}}</td>

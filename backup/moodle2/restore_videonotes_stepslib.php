@@ -100,6 +100,7 @@ class restore_videonotes_activity_structure_step extends restore_activity_struct
      * @return void
      */
     protected function after_execute(): void {
+        $this->add_related_files('mod_videonotes', 'intro', null);
         $this->add_related_files('mod_videonotes', 'video', null);
     }
 }

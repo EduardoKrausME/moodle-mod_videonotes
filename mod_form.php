@@ -95,18 +95,21 @@ class mod_videonotes_mod_form extends moodleform_mod {
      */
     public function add_completion_rules(): array {
         $mform = $this->_form;
+        $suffix = $this->get_suffix();
 
-        $mform->addElement('text', 'completionpercent', get_string('completionpercent', 'videonotes'), ['size' => 5]);
-        $mform->setType('completionpercent', PARAM_INT);
-        $mform->setDefault('completionpercent', 0);
-        $mform->addHelpButton('completionpercent', 'completionpercent', 'videonotes');
+        $completionpercent = 'completionpercent' . $suffix;
+        $mform->addElement('text', $completionpercent, get_string('completionpercent', 'videonotes'), ['size' => 5]);
+        $mform->setType($completionpercent, PARAM_INT);
+        $mform->setDefault($completionpercent, 0);
+        $mform->addHelpButton($completionpercent, 'completionpercent', 'videonotes');
 
-        $mform->addElement('text', 'completionnotes', get_string('completionnotes', 'videonotes'), ['size' => 5]);
-        $mform->setType('completionnotes', PARAM_INT);
-        $mform->setDefault('completionnotes', 0);
-        $mform->addHelpButton('completionnotes', 'completionnotes', 'videonotes');
+        $completionnotes = 'completionnotes' . $suffix;
+        $mform->addElement('text', $completionnotes, get_string('completionnotes', 'videonotes'), ['size' => 5]);
+        $mform->setType($completionnotes, PARAM_INT);
+        $mform->setDefault($completionnotes, 0);
+        $mform->addHelpButton($completionnotes, 'completionnotes', 'videonotes');
 
-        return ['completionpercent', 'completionnotes'];
+        return [$completionpercent, $completionnotes];
     }
 
     /**
@@ -116,7 +119,29 @@ class mod_videonotes_mod_form extends moodleform_mod {
      * @return bool
      */
     public function completion_rule_enabled($data): bool {
-        return !empty($data['completionpercent']) || !empty($data['completionnotes']);
+        $suffix = $this->get_suffix();
+        return !empty($data['completionpercent' . $suffix]) || !empty($data['completionnotes' . $suffix]);
+    }
+
+    /**
+     * Normalises custom completion values after form submission.
+     *
+     * @param stdClass $data Submitted data.
+     * @return void
+     */
+    public function data_postprocessing($data) {
+        parent::data_postprocessing($data);
+
+        if (empty($data->completionunlocked)) {
+            return;
+        }
+
+        $suffix = $this->get_suffix();
+        $completion = $data->{'completion' . $suffix} ?? COMPLETION_TRACKING_NONE;
+        if ((int)$completion !== COMPLETION_TRACKING_AUTOMATIC) {
+            $data->{'completionpercent' . $suffix} = 0;
+            $data->{'completionnotes' . $suffix} = 0;
+        }
     }
 
     /**
