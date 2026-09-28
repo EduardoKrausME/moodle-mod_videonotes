@@ -129,7 +129,7 @@ class mod_videonotes_mod_form extends moodleform_mod {
      * @param stdClass $data Submitted data.
      * @return void
      */
-    public function data_postprocessing($data): void {
+    public function data_postprocessing($data) {
         parent::data_postprocessing($data);
 
         if (empty($data->completionunlocked)) {
