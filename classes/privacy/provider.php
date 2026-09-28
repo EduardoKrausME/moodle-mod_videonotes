@@ -26,8 +26,10 @@ namespace mod_videonotes\privacy;
 
 use core_privacy\local\metadata\collection;
 use core_privacy\local\request\approved_contextlist;
+use core_privacy\local\request\approved_userlist;
 use core_privacy\local\request\contextlist;
 use core_privacy\local\request\transform;
+use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
 
 /**
@@ -35,7 +37,8 @@ use core_privacy\local\request\writer;
  */
 class provider implements
     \core_privacy\local\metadata\provider,
-    \core_privacy\local\request\plugin\provider {
+    \core_privacy\local\request\plugin\provider,
+    \core_privacy\local\request\core_userlist_provider {
     /**
      * Returns metadata.
      *
@@ -181,4 +184,67 @@ class provider implements
             $DB->delete_records('videonotes_progress', ['videonotesid' => $cm->instance, 'userid' => $userid]);
         }
     }
+
+    /**
+     * Adds users who have personal data in the supplied activity context.
+     *
+     * @param userlist $userlist User list for the context.
+     * @return void
+     */
+    public static function get_users_in_context(userlist $userlist): void {
+        $context = $userlist->get_context();
+        if (!$context instanceof \context_module) {
+            return;
+        }
+
+        $cm = get_coursemodule_from_id('videonotes', $context->instanceid, 0, false, IGNORE_MISSING);
+        if (!$cm) {
+            return;
+        }
+
+        $sql = "SELECT userid
+                  FROM {videonotes_notes}
+                 WHERE videonotesid = :notesid
+                 UNION
+                SELECT userid
+                  FROM {videonotes_progress}
+                 WHERE videonotesid = :progressid";
+        $userlist->add_from_sql('userid', $sql, [
+            'notesid' => $cm->instance,
+            'progressid' => $cm->instance,
+        ]);
+    }
+
+    /**
+     * Deletes personal data for an approved set of users in one activity context.
+     *
+     * @param approved_userlist $userlist Approved users and context.
+     * @return void
+     */
+    public static function delete_data_for_users(approved_userlist $userlist): void {
+        global $DB;
+
+        $context = $userlist->get_context();
+        if (!$context instanceof \context_module) {
+            return;
+        }
+
+        $cm = get_coursemodule_from_id('videonotes', $context->instanceid, 0, false, IGNORE_MISSING);
+        if (!$cm) {
+            return;
+        }
+
+        $userids = $userlist->get_userids();
+        if (!$userids) {
+            return;
+        }
+
+        [$usersql, $userparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'privacyuserid');
+        $params = ['videonotesid' => $cm->instance] + $userparams;
+        $select = "videonotesid = :videonotesid AND userid $usersql";
+
+        $DB->delete_records_select('videonotes_notes', $select, $params);
+        $DB->delete_records_select('videonotes_progress', $select, $params);
+    }
+
 }
