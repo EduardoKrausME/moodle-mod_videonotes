@@ -22,7 +22,7 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
+defined('MOODLE_INTERNAL') || die;
 
 $string['addnoteatcurrenttime'] = 'Add note at this moment';
 $string['allowseek'] = 'Allow free seeking';
