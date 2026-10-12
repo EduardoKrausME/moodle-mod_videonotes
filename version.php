@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die;
 
 $plugin->component = 'mod_videonotes';
-$plugin->version = 2026100500;
-$plugin->release = '1.0.7';
+$plugin->version = 2026101200;
+$plugin->release = '1.0.8';
 $plugin->requires = 2024042200;
 $plugin->maturity = MATURITY_STABLE;
